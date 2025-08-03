@@ -2,15 +2,12 @@
 
 use crate::certificate::{CertificateInner, Profile, Rfc5280, TbsCertificateInner};
 use crate::ext::pkix::{NameConstraints, certpolicy::CertificatePolicies};
-use crate::{ext::Extensions, name::Name};
+use crate::{ext::ExtensionsGeneric, name::Name};
 
 use crate::SubjectPublicKeyInfo;
 use alloc::string::String;
-use der::{
-    Choice, Enumerated, Sequence,
-    asn1::OctetString,
-    flagset::{FlagSet, flags},
-};
+use der::{Choice, Enumerated, Sequence, asn1::OctetString, flagset::{FlagSet, flags}, FixedTag, Encode, DerOrd, DecodeValue, Any};
+use der::asn1::BitString;
 
 /// Version identifier for TrustAnchorInfo
 #[derive(Clone, Debug, Default, Copy, PartialEq, Eq, Enumerated)]
@@ -39,22 +36,25 @@ pub enum Version {
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Sequence)]
 #[allow(missing_docs)]
-pub struct TrustAnchorInfo<P: Profile = Rfc5280> {
+pub struct TrustAnchorInfo<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
     #[asn1(default = "Default::default")]
     pub version: Version,
 
     pub pub_key: SubjectPublicKeyInfo,
 
-    pub key_id: OctetString,
+    pub key_id: OctetStringType,
 
     #[asn1(optional = "true")]
     pub ta_title: Option<String>,
 
     #[asn1(optional = "true")]
-    pub cert_path: Option<CertPathControls<P>>,
+    pub cert_path: Option<CertPathControls<AnyType, OctetStringType, BitStringType, P>>,
 
     #[asn1(context_specific = "1", tag_mode = "EXPLICIT", optional = "true")]
-    pub extensions: Option<Extensions>,
+    pub extensions: Option<ExtensionsGeneric<OctetStringType>>,
 
     #[asn1(context_specific = "2", tag_mode = "IMPLICIT", optional = "true")]
     pub ta_title_lang_tag: Option<String>,
@@ -72,11 +72,14 @@ pub struct TrustAnchorInfo<P: Profile = Rfc5280> {
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq, Sequence)]
 #[allow(missing_docs)]
-pub struct CertPathControls<P: Profile = Rfc5280> {
+pub struct CertPathControls<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
     pub ta_name: Name,
 
     #[asn1(context_specific = "0", tag_mode = "IMPLICIT", optional = "true")]
-    pub certificate: Option<CertificateInner<P>>,
+    pub certificate: Option<CertificateInner<AnyType, OctetStringType, BitStringType, P>>,
 
     #[asn1(context_specific = "1", tag_mode = "IMPLICIT", optional = "true")]
     pub policy_set: Option<CertificatePolicies>,
@@ -131,12 +134,17 @@ pub type CertPolicyFlags = FlagSet<CertPolicies>;
 #[derive(Clone, Debug, PartialEq, Eq, Choice)]
 #[allow(clippy::large_enum_variant)]
 #[allow(missing_docs)]
-pub enum TrustAnchorChoice<P: Profile = Rfc5280> {
-    Certificate(CertificateInner<P>),
+pub enum TrustAnchorChoiceGeneric<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
+    Certificate(CertificateInner<AnyType, OctetStringType, BitStringType, P>),
 
     #[asn1(context_specific = "1", tag_mode = "EXPLICIT", constructed = "true")]
-    TbsCertificate(TbsCertificateInner<P>),
+    TbsCertificate(TbsCertificateInner<AnyType, OctetStringType, P>),
 
     #[asn1(context_specific = "2", tag_mode = "EXPLICIT", constructed = "true")]
-    TaInfo(TrustAnchorInfo<P>),
+    TaInfo(TrustAnchorInfo<AnyType, OctetStringType, BitStringType, P>),
 }
+
+pub type TrustAnchorChoice<P: Profile = Rfc5280> = TrustAnchorChoiceGeneric<Any, OctetString, BitString, P>;

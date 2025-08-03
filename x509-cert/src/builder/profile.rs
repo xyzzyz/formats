@@ -16,7 +16,7 @@
 #[cfg(doc)]
 use crate::builder;
 
-use crate::{builder::Result, certificate::TbsCertificate, ext::Extension, name::Name};
+use crate::{builder::Result, certificate::TbsCertificate, ext::ExtensionGeneric, name::Name};
 use alloc::vec;
 use spki::SubjectPublicKeyInfoRef;
 
@@ -42,5 +42,5 @@ pub trait BuilderProfile {
         spk: SubjectPublicKeyInfoRef<'_>,
         issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
-    ) -> Result<vec::Vec<Extension>>;
+    ) -> Result<vec::Vec<ExtensionGeneric>>;
 }

@@ -6,7 +6,7 @@ use der::Sequence;
 use der::asn1::GeneralizedTime;
 
 use crmf::controls::CertId;
-use x509_cert::{crl::CertificateList, ext::Extensions};
+use x509_cert::{crl::CertificateListGeneric, ext::ExtensionsGeneric};
 
 use crate::header::CmpCertificate;
 use crate::status::PkiStatus;
@@ -59,7 +59,7 @@ pub struct RevAnnContent {
     pub cert_id: CertId,
     pub will_be_revoked_at: GeneralizedTime,
     pub bad_since_date: GeneralizedTime,
-    pub crl_details: Option<Extensions>,
+    pub crl_details: Option<ExtensionsGeneric>,
 }
 
 /// The `CRLAnnContent` announcement is defined in [RFC 4210 Section 5.3.16].
@@ -69,4 +69,4 @@ pub struct RevAnnContent {
 /// ```
 ///
 /// [RFC 4210 Section 5.3.16]: https://www.rfc-editor.org/rfc/rfc4210#section-5.3.16
-pub type CrlAnnContent = Vec<CertificateList>;
+pub type CrlAnnContent = Vec<CertificateListGeneric>;

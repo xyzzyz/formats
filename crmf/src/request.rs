@@ -8,7 +8,7 @@ use der::{
 };
 use spki::{AlgorithmIdentifierOwned, SubjectPublicKeyInfoOwned};
 use x509_cert::{
-    Version, attr::Attribute, ext::Extensions, name::Name, serial_number::SerialNumber, time::Time,
+    Version, attr::Attribute, ext::ExtensionsGeneric, name::Name, serial_number::SerialNumber, time::Time,
 };
 
 use crate::controls::Controls;
@@ -122,7 +122,7 @@ pub struct CertTemplate {
     #[asn1(context_specific = "8", tag_mode = "IMPLICIT", optional = "true")]
     pub subject_unique_id: Option<BitString>,
     #[asn1(context_specific = "9", tag_mode = "IMPLICIT", optional = "true")]
-    pub extensions: Option<Extensions>,
+    pub extensions: Option<ExtensionsGeneric>,
 }
 
 /// The `OptionalValidity` type is defined in [RFC 4211 Section 5].

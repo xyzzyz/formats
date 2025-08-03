@@ -1,9 +1,9 @@
 //! PKCS#10 Certification Request types
 
 use crate::{
-    AlgorithmIdentifier, SubjectPublicKeyInfo,
+    SubjectPublicKeyInfo,
     attr::{Attribute, AttributeValue, Attributes},
-    ext::Extension,
+    ext::ExtensionGeneric,
     name::Name,
 };
 
@@ -15,9 +15,10 @@ use der::{
     Decode, Enumerated, Sequence,
     asn1::{Any, BitString, SetOfVec},
 };
-
+use der::asn1::OctetString;
 #[cfg(feature = "pem")]
 use der::pem::PemLabel;
+use spki::AlgorithmIdentifierOwned;
 
 #[cfg(feature = "builder")]
 mod builder;
@@ -82,7 +83,7 @@ pub struct CertReq {
     pub info: CertReqInfo,
 
     /// Signature algorithm identifier.
-    pub algorithm: AlgorithmIdentifier,
+    pub algorithm: AlgorithmIdentifierOwned,
 
     /// Signature.
     pub signature: BitString,
@@ -109,13 +110,13 @@ impl<'a> TryFrom<&'a [u8]> for CertReq {
 ///
 /// [RFC 5272 Section 3.1]: https://datatracker.ietf.org/doc/html/rfc5272#section-3.1
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct ExtensionReq(pub Vec<Extension>);
+pub struct ExtensionReq(pub Vec<ExtensionGeneric<OctetString>>);
 
 impl AssociatedOid for ExtensionReq {
     const OID: ObjectIdentifier = ID_EXTENSION_REQ;
 }
 
-impl_newtype!(ExtensionReq, Vec<Extension>);
+impl_newtype!(ExtensionReq, Vec<ExtensionGeneric<OctetString>>);
 
 impl TryFrom<ExtensionReq> for Attribute {
     type Error = der::Error;

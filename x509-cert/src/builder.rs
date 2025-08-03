@@ -13,9 +13,9 @@ use spki::{
 use crate::{
     AlgorithmIdentifier, SubjectPublicKeyInfo,
     certificate::{self, Certificate, TbsCertificate, Version},
-    crl::{CertificateList, RevokedCert, TbsCertList},
+    crl::{CertificateListGeneric, RevokedCert, TbsCertList},
     ext::{
-        AsExtension, Extensions,
+        AsExtension, ExtensionsGeneric,
         pkix::{AuthorityKeyIdentifier, CrlNumber, SubjectKeyIdentifier},
     },
     serial_number::SerialNumber,
@@ -161,7 +161,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// ```
 pub struct CertificateBuilder<P> {
     tbs: TbsCertificate,
-    extensions: Extensions,
+    extensions: ExtensionsGeneric,
     profile: P,
 }
 
@@ -206,7 +206,7 @@ where
             subject_unique_id: None,
         };
 
-        let extensions = Extensions::default();
+        let extensions = ExtensionsGeneric::default();
         Ok(Self {
             tbs,
             extensions,
@@ -603,7 +603,7 @@ where
 
         let issuer_name = issuer.tbs_certificate.subject().clone();
 
-        let mut crl_extensions = Extensions::new();
+        let mut crl_extensions = ExtensionsGeneric::new();
         crl_extensions.push(crl_number.to_extension(&issuer_name, &crl_extensions)?);
         let aki = match issuer
             .tbs_certificate
@@ -667,7 +667,7 @@ impl<P> Builder for CrlBuilder<P>
 where
     P: certificate::Profile,
 {
-    type Output = CertificateList<P>;
+    type Output = CertificateListGeneric<P>;
 
     fn finalize<S>(&mut self, cert_signer: &S) -> Result<vec::Vec<u8>>
     where
@@ -686,7 +686,7 @@ where
     {
         let signature_algorithm = self.tbs.signature.clone();
 
-        Ok(CertificateList {
+        Ok(CertificateListGeneric {
             tbs_cert_list: self.tbs,
             signature_algorithm,
             signature,

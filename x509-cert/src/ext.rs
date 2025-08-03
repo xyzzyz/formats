@@ -1,7 +1,8 @@
 //! Standardized X.509 Certificate Extensions
 
 use const_oid::AssociatedOid;
-use der::{Sequence, ValueOrd, asn1::OctetString};
+use der::{Sequence, ValueOrd, asn1::OctetString, FixedTag, Encode, EncodeValue, Decode, DecodeValue, Reader, Header, Length, Writer, DerOrd, Tag, ErrorKind, AnyRef};
+use der::asn1::{ContextSpecific, OctetStringRef};
 use spki::ObjectIdentifier;
 
 pub mod pkix;
@@ -26,14 +27,17 @@ pub mod pkix;
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct Extension {
+pub struct ExtensionGeneric<OctetStringType>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a {
     pub extn_id: ObjectIdentifier,
 
     #[asn1(default = "Default::default")]
     pub critical: bool,
 
-    pub extn_value: OctetString,
+    pub extn_value: OctetStringType,
 }
+
+pub type Extension = ExtensionGeneric<OctetString>;
 
 /// Extensions as defined in [RFC 5280 Section 4.1.2.9].
 ///
@@ -42,7 +46,9 @@ pub struct Extension {
 /// ```
 ///
 /// [RFC 5280 Section 4.1.2.9]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.9
-pub type Extensions = alloc::vec::Vec<Extension>;
+pub type ExtensionsGeneric<Value> = alloc::vec::Vec<ExtensionGeneric<Value>>;
+
+pub type Extensions = ExtensionsGeneric<OctetString>;
 
 /// Trait to be implemented by extensions to allow them to be formatted as x509 v3 extensions by
 /// builder.
@@ -51,6 +57,7 @@ pub type Extensions = alloc::vec::Vec<Extension>;
 ///
 /// ```
 /// use const_oid::{AssociatedOid, ObjectIdentifier};
+/// use der::asn1::OctetString;
 /// use x509_cert::{der::Sequence, ext, name};
 ///
 /// /// This extension indicates the age of the captain at the time of signature
@@ -66,7 +73,7 @@ pub type Extensions = alloc::vec::Vec<Extension>;
 /// }
 ///
 /// impl ext::AsExtension for CaptainAge {
-///     fn critical(&self, _subject: &name::Name, _extensions: &[ext::Extension]) -> bool {
+///     fn critical(&self, _subject: &name::Name, _extensions: &[ext::ExtensionGeneric<OctetString>]) -> bool {
 ///         false
 ///     }
 /// }
@@ -85,20 +92,45 @@ pub trait AsExtension: AssociatedOid + der::Encode {
     /// ```
     ///
     /// [RFC 5280 Section 4.2]: https://www.rfc-editor.org/rfc/rfc5280#section-4.2
-    fn critical(&self, subject: &crate::name::Name, extensions: &[Extension]) -> bool;
+    fn critical(&self, subject: &crate::name::Name, extensions: &[ExtensionGeneric<OctetString>]) -> bool;
 
     /// Returns the Extension with the content encoded.
     fn to_extension(
         &self,
         subject: &crate::name::Name,
-        extensions: &[Extension],
-    ) -> Result<Extension, der::Error> {
+        extensions: &[ExtensionGeneric<OctetString>],
+    ) -> Result<ExtensionGeneric<OctetString>, der::Error> {
         let content = OctetString::new(<Self as der::Encode>::to_der(self)?)?;
 
-        Ok(Extension {
+        Ok(ExtensionGeneric {
             extn_id: <Self as AssociatedOid>::OID,
             critical: self.critical(subject, extensions),
             extn_value: content,
         })
     }
 }
+
+
+/// [`OctetStringLike`] marks object that will act like a OctetString.
+///
+/// It will allow to get a [`OctetStringRef`] that points back to the underlying bytes.
+ trait OctetStringLike {
+        fn as_octet_string(&self) -> OctetStringRef<'_>;
+    }
+
+impl OctetStringLike for OctetStringRef<'_> {
+    fn as_octet_string(&self) -> OctetStringRef<'_> {
+        OctetStringRef::from(self)
+    }
+}
+
+//#[cfg(feature = "alloc")]
+// mod allocating {
+//     use super::*;
+
+    impl OctetStringLike for OctetString {
+        fn as_octet_string(&self) -> OctetStringRef<'_> {
+            OctetStringRef::from(self)
+        }
+    }
+// }

@@ -1,4 +1,5 @@
 use const_oid::{AssociatedOid, ObjectIdentifier, db::rfc5280::ID_CE_BASIC_CONSTRAINTS};
+use der::asn1::OctetString;
 use der::Sequence;
 
 /// BasicConstraints as defined in [RFC 5280 Section 4.2.1.9].
@@ -27,7 +28,7 @@ impl crate::ext::AsExtension for BasicConstraints {
     fn critical(
         &self,
         _subject: &crate::name::Name,
-        _extensions: &[crate::ext::Extension],
+        _extensions: &[crate::ext::ExtensionGeneric<OctetString>],
     ) -> bool {
         // https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.9
         //   Conforming CAs MUST include this extension in all CA certificates

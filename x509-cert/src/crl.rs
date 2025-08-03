@@ -1,9 +1,9 @@
 //! Certificate Revocation List types
 
 use crate::{
-    AlgorithmIdentifier, Version,
+    Version,
     certificate::{Profile, Rfc5280},
-    ext::Extensions,
+    ext::ExtensionsGeneric,
     name::Name,
     serial_number::SerialNumber,
     time::Time,
@@ -11,11 +11,12 @@ use crate::{
 
 use alloc::vec::Vec;
 
-use der::asn1::BitString;
-use der::{Sequence, ValueOrd};
+use der::asn1::{BitString, OctetString, OctetStringRef};
+use der::{DecodeValue, DerOrd, Encode, FixedTag, Sequence, ValueOrd};
 
 #[cfg(feature = "pem")]
 use der::pem::PemLabel;
+use spki::AlgorithmIdentifierOwned;
 
 /// `CertificateList` as defined in [RFC 5280 Section 5.1].
 ///
@@ -30,14 +31,18 @@ use der::pem::PemLabel;
 /// [RFC 5280 Section 5.1]: https://datatracker.ietf.org/doc/html/rfc5280#section-5.1
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct CertificateList<P: Profile = Rfc5280> {
-    pub tbs_cert_list: TbsCertList<P>,
-    pub signature_algorithm: AlgorithmIdentifier,
+pub struct CertificateListGeneric<OctetStringType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a{
+    pub tbs_cert_list: TbsCertList<OctetStringType, P>,
+    pub signature_algorithm: AlgorithmIdentifierOwned,
     pub signature: BitString,
 }
 
+pub type CertificateList<P: Profile = Rfc5280> = CertificateListGeneric<OctetString, P>;
+
 #[cfg(feature = "pem")]
-impl<P: Profile> PemLabel for CertificateList<P> {
+impl<OctetStringType, P: Profile> PemLabel for CertificateListGeneric<OctetStringType, P>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a {
     const PEM_LABEL: &'static str = "X509 CRL";
 }
 
@@ -57,10 +62,11 @@ impl<P: Profile> PemLabel for CertificateList<P> {
 /// [RFC 5280 Section 5.1]: https://datatracker.ietf.org/doc/html/rfc5280#section-5.1
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct RevokedCert<P: Profile = Rfc5280> {
+pub struct RevokedCert<OctetStringType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a{
     pub serial_number: SerialNumber<P>,
     pub revocation_date: Time,
-    pub crl_entry_extensions: Option<Extensions>,
+    pub crl_entry_extensions: Option<ExtensionsGeneric<OctetStringType>>,
 }
 
 /// `TbsCertList` as defined in [RFC 5280 Section 5.1].
@@ -84,14 +90,15 @@ pub struct RevokedCert<P: Profile = Rfc5280> {
 /// [RFC 5280 Section 5.1]: https://datatracker.ietf.org/doc/html/rfc5280#section-5.1
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct TbsCertList<P: Profile = Rfc5280> {
+pub struct TbsCertList<OctetStringType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a {
     pub version: Version,
-    pub signature: AlgorithmIdentifier,
+    pub signature: AlgorithmIdentifierOwned,
     pub issuer: Name,
     pub this_update: Time,
     pub next_update: Option<Time>,
-    pub revoked_certificates: Option<Vec<RevokedCert<P>>>,
+    pub revoked_certificates: Option<Vec<RevokedCert<OctetStringType, P>>>,
 
     #[asn1(context_specific = "0", tag_mode = "EXPLICIT", optional = "true")]
-    pub crl_extensions: Option<Extensions>,
+    pub crl_extensions: Option<ExtensionsGeneric<OctetStringType>>,
 }
