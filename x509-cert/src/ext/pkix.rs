@@ -15,7 +15,7 @@ pub mod sct;
 use crate::attr::Attribute;
 
 pub use access::{AccessDescription, AuthorityInfoAccessSyntax, SubjectInfoAccessSyntax};
-pub use authkeyid::AuthorityKeyIdentifier;
+pub use authkeyid::{AuthorityKeyIdentifierGeneric, AuthorityKeyIdentifier};
 pub use certpolicy::CertificatePolicies;
 use const_oid::{AssociatedOid, ObjectIdentifier};
 pub use constraints::{BasicConstraints, NameConstraints, PolicyConstraints};

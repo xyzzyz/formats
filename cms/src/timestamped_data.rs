@@ -11,7 +11,7 @@ use der::{
 use spki::AlgorithmIdentifierOwned;
 use x509_cert::{
     attr::{Attribute, Attributes},
-    crl::CertificateListGeneric,
+    crl::CertificateList,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Enumerated)]
@@ -102,7 +102,7 @@ pub type TimeStampTokenEvidence = Vec<TimeStampAndCrl>;
 pub struct TimeStampAndCrl {
     pub time_stamp: TimeStampToken,
     #[asn1(optional = "true")]
-    pub crl: Option<CertificateListGeneric>,
+    pub crl: Option<CertificateList>,
 }
 
 /// ```text

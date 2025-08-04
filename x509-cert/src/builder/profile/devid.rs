@@ -21,7 +21,7 @@ use crate::{
     ext::{
         AsExtension, ExtensionGeneric,
         pkix::{
-            AuthorityKeyIdentifier, KeyUsage, KeyUsages, SubjectAltName,
+            AuthorityKeyIdentifierGeneric, KeyUsage, KeyUsages, SubjectAltName,
             name::{GeneralName, GeneralNames, HardwareModuleName, OtherName},
         },
     },
@@ -134,7 +134,7 @@ impl BuilderProfile for DevId {
         // ## authorityKeyIdentifier MUST
         // Section 8.10.1
         extensions.push(
-            AuthorityKeyIdentifier::try_from(issuer_spk.clone())?
+            AuthorityKeyIdentifierGeneric::try_from(issuer_spk.clone())?
                 .to_extension(&tbs.subject, &extensions)?,
         );
 

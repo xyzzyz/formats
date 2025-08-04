@@ -6,8 +6,9 @@ use crate::{ext::ExtensionsGeneric, name::Name};
 
 use crate::SubjectPublicKeyInfo;
 use alloc::string::String;
-use der::{Choice, Enumerated, Sequence, asn1::OctetString, flagset::{FlagSet, flags}, FixedTag, Encode, DerOrd, DecodeValue, Any};
-use der::asn1::BitString;
+use der::{Choice, Enumerated, Sequence, asn1::OctetString, flagset::{FlagSet, flags}, FixedTag, Encode, DerOrd, DecodeValue, Any, EncodeValue};
+use der::asn1::{BitString, Int};
+use crate::serial_number::IntLike;
 
 /// Version identifier for TrustAnchorInfo
 #[derive(Clone, Debug, Default, Copy, PartialEq, Eq, Enumerated)]
@@ -36,10 +37,11 @@ pub enum Version {
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Sequence)]
 #[allow(missing_docs)]
-pub struct TrustAnchorInfo<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+pub struct TrustAnchorInfo<AnyType, OctetStringType, BitStringType, IntType, P: Profile = Rfc5280>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     #[asn1(default = "Default::default")]
     pub version: Version,
 
@@ -51,7 +53,7 @@ where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Erro
     pub ta_title: Option<String>,
 
     #[asn1(optional = "true")]
-    pub cert_path: Option<CertPathControls<AnyType, OctetStringType, BitStringType, P>>,
+    pub cert_path: Option<CertPathControls<AnyType, OctetStringType, BitStringType, IntType, P>>,
 
     #[asn1(context_specific = "1", tag_mode = "EXPLICIT", optional = "true")]
     pub extensions: Option<ExtensionsGeneric<OctetStringType>>,
@@ -72,14 +74,15 @@ where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Erro
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq, Sequence)]
 #[allow(missing_docs)]
-pub struct CertPathControls<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+pub struct CertPathControls<AnyType, OctetStringType, BitStringType, IntType, P: Profile = Rfc5280>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     pub ta_name: Name,
 
     #[asn1(context_specific = "0", tag_mode = "IMPLICIT", optional = "true")]
-    pub certificate: Option<CertificateInner<AnyType, OctetStringType, BitStringType, P>>,
+    pub certificate: Option<CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>>,
 
     #[asn1(context_specific = "1", tag_mode = "IMPLICIT", optional = "true")]
     pub policy_set: Option<CertificatePolicies>,
@@ -134,17 +137,18 @@ pub type CertPolicyFlags = FlagSet<CertPolicies>;
 #[derive(Clone, Debug, PartialEq, Eq, Choice)]
 #[allow(clippy::large_enum_variant)]
 #[allow(missing_docs)]
-pub enum TrustAnchorChoiceGeneric<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+pub enum TrustAnchorChoiceGeneric<AnyType, OctetStringType, BitStringType, IntType, P: Profile = Rfc5280>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
-    Certificate(CertificateInner<AnyType, OctetStringType, BitStringType, P>),
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
+    Certificate(CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>),
 
     #[asn1(context_specific = "1", tag_mode = "EXPLICIT", constructed = "true")]
-    TbsCertificate(TbsCertificateInner<AnyType, OctetStringType, P>),
+    TbsCertificate(TbsCertificateInner<AnyType, OctetStringType, IntType, P>),
 
     #[asn1(context_specific = "2", tag_mode = "EXPLICIT", constructed = "true")]
-    TaInfo(TrustAnchorInfo<AnyType, OctetStringType, BitStringType, P>),
+    TaInfo(TrustAnchorInfo<AnyType, OctetStringType, BitStringType, IntType, P>),
 }
 
-pub type TrustAnchorChoice<P: Profile = Rfc5280> = TrustAnchorChoiceGeneric<Any, OctetString, BitString, P>;
+pub type TrustAnchorChoice<P: Profile = Rfc5280> = TrustAnchorChoiceGeneric<Any, OctetString, BitString, Int, P>;

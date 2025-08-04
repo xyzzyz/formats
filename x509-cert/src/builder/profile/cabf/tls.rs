@@ -18,7 +18,7 @@ use crate::{
     ext::{
         AsExtension, ExtensionGeneric,
         pkix::{
-            AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
+            AuthorityKeyIdentifierGeneric, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
             SubjectKeyIdentifier, name::GeneralNames,
         },
     },
@@ -72,7 +72,7 @@ impl BuilderProfile for Subordinate {
         // ## authorityKeyIdentifier MUST
         // 7.1.2.11.1 Authority Key Identifier
         extensions.push(
-            AuthorityKeyIdentifier::try_from(issuer_spk.clone())?
+            AuthorityKeyIdentifierGeneric::try_from(issuer_spk.clone())?
                 .to_extension(&tbs.subject, &extensions)?,
         );
 
@@ -264,7 +264,7 @@ impl BuilderProfile for Subscriber {
         // ## authorityKeyIdentifier MUST
         // 7.1.2.11.1 Authority Key Identifier
         extensions.push(
-            AuthorityKeyIdentifier::try_from(issuer_spk.clone())?
+            AuthorityKeyIdentifierGeneric::try_from(issuer_spk.clone())?
                 .to_extension(&tbs.subject, &extensions)?,
         );
 

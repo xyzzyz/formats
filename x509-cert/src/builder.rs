@@ -16,7 +16,7 @@ use crate::{
     crl::{CertificateListGeneric, RevokedCert, TbsCertList},
     ext::{
         AsExtension, ExtensionsGeneric,
-        pkix::{AuthorityKeyIdentifier, CrlNumber, SubjectKeyIdentifier},
+        pkix::{AuthorityKeyIdentifierGeneric, CrlNumber, SubjectKeyIdentifier},
     },
     serial_number::SerialNumber,
     time::{Time, Validity},
@@ -607,7 +607,7 @@ where
         crl_extensions.push(crl_number.to_extension(&issuer_name, &crl_extensions)?);
         let aki = match issuer
             .tbs_certificate
-            .get_extension::<AuthorityKeyIdentifier>()?
+            .get_extension::<AuthorityKeyIdentifierGeneric>()?
         {
             Some((_, aki)) => aki,
             None => {
@@ -617,7 +617,7 @@ where
                         .subject_public_key_info()
                         .owned_to_ref(),
                 )?;
-                AuthorityKeyIdentifier {
+                AuthorityKeyIdentifierGeneric {
                     // KeyIdentifier must be the same as subjectKeyIdentifier
                     key_identifier: Some(ski.0.clone()),
                     // other fields must not be present.

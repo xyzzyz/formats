@@ -5,7 +5,7 @@ use der::asn1::SetOfVec;
 use der::{Any, Choice, Sequence, ValueOrd};
 use spki::AlgorithmIdentifierOwned;
 
-use x509_cert::crl::CertificateListGeneric;
+use x509_cert::crl::CertificateList;
 use x509_cert::impl_newtype;
 
 /// The `RevocationInfoChoices` type is defined in [RFC 5652 Section 10.2.1].
@@ -33,7 +33,7 @@ impl_newtype!(RevocationInfoChoices, SetOfVec<RevocationInfoChoice>);
 #[allow(missing_docs)]
 #[allow(clippy::large_enum_variant)]
 pub enum RevocationInfoChoice {
-    Crl(CertificateListGeneric),
+    Crl(CertificateList),
     #[asn1(context_specific = "1", tag_mode = "IMPLICIT", constructed = "true")]
     Other(OtherRevocationInfoFormat),
 }

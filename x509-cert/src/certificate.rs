@@ -1,11 +1,11 @@
 //! Certificate types
 
-use crate::{SubjectPublicKeyInfo};
+use crate::{serial_number, SubjectPublicKeyInfo};
 use crate::{ext, name::Name, serial_number::SerialNumber, time::Validity};
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use core::{cmp::Ordering, fmt::Debug};
-use der::{Decode, Enumerated, ErrorKind, Sequence, Tag, ValueOrd, asn1::BitString, FixedTag, Encode, DerOrd, DecodeValue, Choice, Any};
+use der::{Decode, Enumerated, ErrorKind, Sequence, Tag, ValueOrd, asn1::BitString, FixedTag, Encode, DerOrd, DecodeValue, Choice, Any, EncodeValue};
 
 #[cfg(feature = "pem")]
 use der::{
@@ -19,8 +19,9 @@ use {
     digest::{Digest, Output},
     spki::DigestWriter,
 };
-use der::asn1::{OctetString, OctetStringRef};
+use der::asn1::{Int, OctetString, OctetStringRef};
 use spki::{AlgorithmIdentifier, AlgorithmIdentifierOwned};
+use crate::serial_number::IntLike;
 use crate::time::Time;
 
 /// [`Profile`] allows the consumer of this crate to customize the behavior when parsing
@@ -28,11 +29,12 @@ use crate::time::Time;
 /// By default, parsing will be made in a rfc5280-compliant manner.
 pub trait Profile: PartialEq + Debug + Eq + Ord + Clone + Copy + Default + 'static {
     /// Checks to run when parsing serial numbers
-    fn check_serial_number(serial: &SerialNumber<Self>) -> der::Result<()> {
+    fn check_serial_number<'a, IntType>(serial: &SerialNumber<IntType, Self>) -> der::Result<()>
+    where IntType: DerOrd + IntLike<'a> + DecodeValue<'a, Error = der::Error> + 'a {
         // See the note in `SerialNumber::new`: we permit lengths of 21 bytes here,
         // since some X.509 implementations interpret the limit of 20 bytes to refer
         // to the pre-encoded value.
-        if serial.inner.len() > SerialNumber::<Self>::MAX_DECODE_LEN {
+        if serial.inner.len() > serial_number::MAX_DECODE_LEN {
             Err(Tag::Integer.value_error().into())
         } else {
             Ok(())
@@ -112,7 +114,7 @@ impl Default for Version {
 }
 
 /// X.509 `TbsCertificate` as defined in [RFC 5280 Section 4.1]
-pub type TbsCertificate = TbsCertificateInner<Any, OctetString, Rfc5280>;
+pub type TbsCertificate = TbsCertificateInner<Any, OctetString, Int, Rfc5280>;
 
 /// X.509 `TbsCertificate` as defined in [RFC 5280 Section 4.1]
 ///
@@ -142,9 +144,10 @@ pub type TbsCertificate = TbsCertificateInner<Any, OctetString, Rfc5280>;
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct TbsCertificateInner<AnyType, OctetStringType, P: Profile = Rfc5280>
-where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
+pub struct TbsCertificateInner<AnyType, OctetStringType, IntType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: DerOrd + FixedTag + Encode + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: DerOrd + Encode + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// The certificate version.
     ///
     /// Note that this value defaults to Version 1 per the RFC. However,
@@ -154,7 +157,7 @@ where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Erro
     #[asn1(context_specific = "0", default = "Default::default")]
     pub(crate) version: Version,
 
-    pub(crate) serial_number: SerialNumber<P>,
+    pub(crate) serial_number: SerialNumber<IntType, P>,
     pub(crate) signature: AlgorithmIdentifier<AnyType>,
     pub(crate) issuer: Name,
     pub(crate) validity: Validity<P>,
@@ -171,10 +174,10 @@ where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Erro
     pub(crate) extensions: Option<ext::ExtensionsGeneric<OctetStringType>>,
 }
 
-impl<AnyType, OctetStringType, P: Profile> TbsCertificateInner<AnyType, OctetStringType, P>
+impl<AnyType, OctetStringType, IntType, P: Profile> TbsCertificateInner<AnyType, OctetStringType, IntType, P>
 where for<'a> OctetStringType: AsRef<[u8]> + FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a
-{
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// [`Version`] of this certificate (v1/v2/v3).
     pub fn version(&self) -> Version {
         self.version
@@ -184,7 +187,7 @@ where for<'a> OctetStringType: AsRef<[u8]> + FixedTag + Encode + DerOrd + Decode
     ///
     /// X.509 serial numbers are used to uniquely identify certificates issued by a given
     /// Certificate Authority (CA) identified in the `issuer` field.
-    pub fn serial_number(&self) -> &SerialNumber<P> {
+    pub fn serial_number(&self) -> &SerialNumber<IntType, P> {
         &self.serial_number
     }
 
@@ -324,7 +327,7 @@ where for<'a> OctetStringType: AsRef<[u8]> + FixedTag + Encode + DerOrd + Decode
 /// X.509 certificates are defined in [RFC 5280 Section 4.1].
 ///
 /// [RFC 5280 Section 4.1]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
-pub type Certificate = CertificateInner<Any, OctetString, BitString, Rfc5280>;
+pub type Certificate = CertificateInner<Any, OctetString, BitString, Int, Rfc5280>;
 
 /// X.509 certificates are defined in [RFC 5280 Section 4.1].
 ///
@@ -340,21 +343,23 @@ pub type Certificate = CertificateInner<Any, OctetString, BitString, Rfc5280>;
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct CertificateInner<AnyType, OctetStringType, BitStringType, P: Profile = Rfc5280>
+pub struct CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P: Profile = Rfc5280>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a {
-    pub(crate) tbs_certificate: TbsCertificateInner<AnyType, OctetStringType, P>,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
+    pub(crate) tbs_certificate: TbsCertificateInner<AnyType, OctetStringType, IntType, P>,
     pub(crate) signature_algorithm: AlgorithmIdentifier<AnyType>,
     pub(crate) signature: BitStringType,
 }
 
-impl<AnyType, OctetStringType, BitStringType, P: Profile> CertificateInner<AnyType, OctetStringType, BitStringType, P>
+impl<AnyType, OctetStringType, BitStringType, IntType, P: Profile> CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a {
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// Get the [`TbsCertificateInner`] (i.e. the part the signature is computed over).
-    pub fn tbs_certificate(&self) -> &TbsCertificateInner<AnyType, OctetStringType, P> {
+    pub fn tbs_certificate(&self) -> &TbsCertificateInner<AnyType, OctetStringType, IntType, P> {
         &self.tbs_certificate
     }
 
@@ -371,10 +376,11 @@ where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Erro
 }
 
 #[cfg(feature = "pem")]
-impl<AnyType, OctetStringType, BitStringType, P: Profile> PemLabel for CertificateInner<AnyType, OctetStringType, BitStringType, P>
+impl<AnyType, OctetStringType, BitStringType, IntType, P: Profile> PemLabel for CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     const PEM_LABEL: &'static str = "CERTIFICATE";
 }
 
@@ -392,10 +398,11 @@ where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Erro
 pub type PkiPath = Vec<Certificate>;
 
 #[cfg(feature = "pem")]
-impl<AnyType, OctetStringType, BitStringType, P: Profile> CertificateInner<AnyType, OctetStringType, BitStringType, P>
+impl<AnyType, OctetStringType, BitStringType, IntType, P: Profile> CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>
 where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
       for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
-      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a{
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// Parse a chain of pem-encoded certificates from a slice.
     ///
     /// Returns the list of certificates.

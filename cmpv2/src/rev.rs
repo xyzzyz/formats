@@ -6,8 +6,8 @@ use der::Sequence;
 
 use crmf::controls::CertId;
 use crmf::request::CertTemplate;
-use x509_cert::crl::CertificateListGeneric;
-use x509_cert::ext::ExtensionsGeneric;
+use x509_cert::crl::CertificateList;
+use x509_cert::ext::Extensions;
 
 use crate::status::PkiStatusInfo;
 
@@ -38,7 +38,7 @@ pub type RevReqContent = Vec<RevDetails>;
 #[allow(missing_docs)]
 pub struct RevDetails {
     pub cert_details: CertTemplate,
-    pub crl_entry_details: Option<ExtensionsGeneric>,
+    pub crl_entry_details: Option<Extensions>,
 }
 
 /// The `RevRepContent` type is defined in [RFC 4210 Section 5.3.10].
@@ -59,5 +59,5 @@ pub struct RevRepContent<'a> {
     #[asn1(context_specific = "0", tag_mode = "EXPLICIT", optional = "true")]
     pub rev_certs: Option<Vec<CertId>>,
     #[asn1(context_specific = "1", tag_mode = "EXPLICIT", optional = "true")]
-    pub crls: Option<Vec<CertificateListGeneric>>,
+    pub crls: Option<Vec<CertificateList>>,
 }
