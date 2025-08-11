@@ -91,7 +91,7 @@ macro_rules! impl_extension {
             fn critical(
                 &self,
                 _subject: &crate::name::Name,
-                _extensions: &[crate::ext::Extension],
+                _extensions: &[crate::ext::ExtensionGeneric<der::asn1::OctetString>],
             ) -> bool {
                 $critical
             }

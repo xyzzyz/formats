@@ -16,9 +16,9 @@ use crate::{
     builder::{BuilderProfile, Result},
     certificate::TbsCertificate,
     ext::{
-        AsExtension, Extension,
+        AsExtension, ExtensionGeneric,
         pkix::{
-            AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
+            AuthorityKeyIdentifierGeneric, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
             SubjectKeyIdentifier, name::GeneralNames,
         },
     },
@@ -64,15 +64,15 @@ impl BuilderProfile for Subordinate {
         spk: SubjectPublicKeyInfoRef<'_>,
         issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
-    ) -> Result<vec::Vec<Extension>> {
-        let mut extensions: vec::Vec<Extension> = vec::Vec::new();
+    ) -> Result<vec::Vec<ExtensionGeneric>> {
+        let mut extensions: vec::Vec<ExtensionGeneric> = vec::Vec::new();
 
         // # 7.1.2.6.1 TLS Subordinate CA Extensions
 
         // ## authorityKeyIdentifier MUST
         // 7.1.2.11.1 Authority Key Identifier
         extensions.push(
-            AuthorityKeyIdentifier::try_from(issuer_spk.clone())?
+            AuthorityKeyIdentifierGeneric::try_from(issuer_spk.clone())?
                 .to_extension(&tbs.subject, &extensions)?,
         );
 
@@ -252,8 +252,8 @@ impl BuilderProfile for Subscriber {
         spk: SubjectPublicKeyInfoRef<'_>,
         issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
-    ) -> Result<vec::Vec<Extension>> {
-        let mut extensions: vec::Vec<Extension> = vec::Vec::new();
+    ) -> Result<vec::Vec<ExtensionGeneric>> {
+        let mut extensions: vec::Vec<ExtensionGeneric> = vec::Vec::new();
 
         // # 7.1.2.7.6 Subscriber Certificate Extensions
 
@@ -264,7 +264,7 @@ impl BuilderProfile for Subscriber {
         // ## authorityKeyIdentifier MUST
         // 7.1.2.11.1 Authority Key Identifier
         extensions.push(
-            AuthorityKeyIdentifier::try_from(issuer_spk.clone())?
+            AuthorityKeyIdentifierGeneric::try_from(issuer_spk.clone())?
                 .to_extension(&tbs.subject, &extensions)?,
         );
 

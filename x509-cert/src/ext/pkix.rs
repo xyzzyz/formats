@@ -15,7 +15,7 @@ pub mod sct;
 use crate::attr::Attribute;
 
 pub use access::{AccessDescription, AuthorityInfoAccessSyntax, SubjectInfoAccessSyntax};
-pub use authkeyid::AuthorityKeyIdentifier;
+pub use authkeyid::{AuthorityKeyIdentifierGeneric, AuthorityKeyIdentifier};
 pub use certpolicy::CertificatePolicies;
 use const_oid::{AssociatedOid, ObjectIdentifier};
 pub use constraints::{BasicConstraints, NameConstraints, PolicyConstraints};
@@ -79,7 +79,7 @@ impl AssociatedOid for SubjectAltName {
 impl_newtype!(SubjectAltName, name::GeneralNames);
 
 impl crate::ext::AsExtension for SubjectAltName {
-    fn critical(&self, subject: &crate::name::Name, _extensions: &[super::Extension]) -> bool {
+    fn critical(&self, subject: &crate::name::Name, _extensions: &[super::ExtensionGeneric<OctetString>]) -> bool {
         // https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.6
         //   Further, if the only subject identity included in the certificate is
         //   an alternative name form (e.g., an electronic mail address), then the

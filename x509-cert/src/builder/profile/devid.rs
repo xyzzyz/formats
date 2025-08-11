@@ -19,9 +19,9 @@ use crate::{
     builder::{BuilderProfile, Result},
     certificate::TbsCertificate,
     ext::{
-        AsExtension, Extension,
+        AsExtension, ExtensionGeneric,
         pkix::{
-            AuthorityKeyIdentifier, KeyUsage, KeyUsages, SubjectAltName,
+            AuthorityKeyIdentifierGeneric, KeyUsage, KeyUsages, SubjectAltName,
             name::{GeneralName, GeneralNames, HardwareModuleName, OtherName},
         },
     },
@@ -126,15 +126,15 @@ impl BuilderProfile for DevId {
         _spk: SubjectPublicKeyInfoRef<'_>,
         issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
-    ) -> Result<vec::Vec<Extension>> {
-        let mut extensions: vec::Vec<Extension> = vec::Vec::new();
+    ) -> Result<vec::Vec<ExtensionGeneric>> {
+        let mut extensions: vec::Vec<ExtensionGeneric> = vec::Vec::new();
 
         // # Table 8-2 - DevID certificate and intermediate certificate extensions
 
         // ## authorityKeyIdentifier MUST
         // Section 8.10.1
         extensions.push(
-            AuthorityKeyIdentifier::try_from(issuer_spk.clone())?
+            AuthorityKeyIdentifierGeneric::try_from(issuer_spk.clone())?
                 .to_extension(&tbs.subject, &extensions)?,
         );
 

@@ -43,6 +43,5 @@ pub use certificate::{Certificate, PkiPath, TbsCertificate, Version};
 pub use der;
 pub use spki;
 pub use spki::{
-    AlgorithmIdentifierOwned as AlgorithmIdentifier,
     SubjectPublicKeyInfoOwned as SubjectPublicKeyInfo,
 };

@@ -8,9 +8,9 @@ use crate::{
     builder::{BuilderProfile, Error, Result},
     certificate::TbsCertificate,
     ext::{
-        AsExtension, Extension,
+        AsExtension, ExtensionGeneric,
         pkix::{
-            AuthorityKeyIdentifier, BasicConstraints, KeyUsage, KeyUsages, SubjectKeyIdentifier,
+            AuthorityKeyIdentifierGeneric, BasicConstraints, KeyUsage, KeyUsages, SubjectKeyIdentifier,
         },
     },
     name::Name,
@@ -137,8 +137,8 @@ impl BuilderProfile for Root {
         spk: SubjectPublicKeyInfoRef<'_>,
         _issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
-    ) -> Result<vec::Vec<Extension>> {
-        let mut extensions: vec::Vec<Extension> = vec::Vec::new();
+    ) -> Result<vec::Vec<ExtensionGeneric>> {
+        let mut extensions: vec::Vec<ExtensionGeneric> = vec::Vec::new();
 
         // 7.1.2.1.2 Root CA Extensions
 
@@ -147,7 +147,7 @@ impl BuilderProfile for Root {
         // ## authorityKeyIdentifier RECOMMENDED
         // 7.1.2.1.3 Root CA Authority Key Identifier
         extensions.push(
-            AuthorityKeyIdentifier {
+            AuthorityKeyIdentifierGeneric {
                 // KeyIdentifier must be the same as subjectKeyIdentifier
                 key_identifier: Some(ski.0.clone()),
                 // other fields must not be present.

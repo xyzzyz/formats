@@ -1,11 +1,11 @@
 //! Certificate types
 
-use crate::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use crate::{serial_number, SubjectPublicKeyInfo};
 use crate::{ext, name::Name, serial_number::SerialNumber, time::Validity};
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use core::{cmp::Ordering, fmt::Debug};
-use der::{Decode, Enumerated, ErrorKind, Sequence, Tag, ValueOrd, asn1::BitString};
+use der::{Decode, Enumerated, ErrorKind, Sequence, Tag, ValueOrd, asn1::BitString, FixedTag, Encode, DerOrd, DecodeValue, Choice, Any, EncodeValue};
 
 #[cfg(feature = "pem")]
 use der::{
@@ -19,7 +19,9 @@ use {
     digest::{Digest, Output},
     spki::DigestWriter,
 };
-
+use der::asn1::{Int, OctetString, OctetStringRef};
+use spki::{AlgorithmIdentifier, AlgorithmIdentifierOwned};
+use crate::serial_number::IntLike;
 use crate::time::Time;
 
 /// [`Profile`] allows the consumer of this crate to customize the behavior when parsing
@@ -27,11 +29,12 @@ use crate::time::Time;
 /// By default, parsing will be made in a rfc5280-compliant manner.
 pub trait Profile: PartialEq + Debug + Eq + Ord + Clone + Copy + Default + 'static {
     /// Checks to run when parsing serial numbers
-    fn check_serial_number(serial: &SerialNumber<Self>) -> der::Result<()> {
+    fn check_serial_number<'a, IntType>(serial: &SerialNumber<IntType, Self>) -> der::Result<()>
+    where IntType: DerOrd + IntLike<'a> + DecodeValue<'a, Error = der::Error> + 'a {
         // See the note in `SerialNumber::new`: we permit lengths of 21 bytes here,
         // since some X.509 implementations interpret the limit of 20 bytes to refer
         // to the pre-encoded value.
-        if serial.inner.len() > SerialNumber::<Self>::MAX_DECODE_LEN {
+        if serial.inner.len() > serial_number::MAX_DECODE_LEN {
             Err(Tag::Integer.value_error().into())
         } else {
             Ok(())
@@ -111,7 +114,7 @@ impl Default for Version {
 }
 
 /// X.509 `TbsCertificate` as defined in [RFC 5280 Section 4.1]
-pub type TbsCertificate = TbsCertificateInner<Rfc5280>;
+pub type TbsCertificate = TbsCertificateInner<Any, OctetString, Int, Rfc5280>;
 
 /// X.509 `TbsCertificate` as defined in [RFC 5280 Section 4.1]
 ///
@@ -141,7 +144,10 @@ pub type TbsCertificate = TbsCertificateInner<Rfc5280>;
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct TbsCertificateInner<P: Profile = Rfc5280> {
+pub struct TbsCertificateInner<AnyType, OctetStringType, IntType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: DerOrd + FixedTag + Encode + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: DerOrd + Encode + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// The certificate version.
     ///
     /// Note that this value defaults to Version 1 per the RFC. However,
@@ -151,8 +157,8 @@ pub struct TbsCertificateInner<P: Profile = Rfc5280> {
     #[asn1(context_specific = "0", default = "Default::default")]
     pub(crate) version: Version,
 
-    pub(crate) serial_number: SerialNumber<P>,
-    pub(crate) signature: AlgorithmIdentifier,
+    pub(crate) serial_number: SerialNumber<IntType, P>,
+    pub(crate) signature: AlgorithmIdentifier<AnyType>,
     pub(crate) issuer: Name,
     pub(crate) validity: Validity<P>,
     pub(crate) subject: Name,
@@ -165,10 +171,13 @@ pub struct TbsCertificateInner<P: Profile = Rfc5280> {
     pub(crate) subject_unique_id: Option<BitString>,
 
     #[asn1(context_specific = "3", tag_mode = "EXPLICIT", optional = "true")]
-    pub(crate) extensions: Option<ext::Extensions>,
+    pub(crate) extensions: Option<ext::ExtensionsGeneric<OctetStringType>>,
 }
 
-impl<P: Profile> TbsCertificateInner<P> {
+impl<AnyType, OctetStringType, IntType, P: Profile> TbsCertificateInner<AnyType, OctetStringType, IntType, P>
+where for<'a> OctetStringType: AsRef<[u8]> + FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// [`Version`] of this certificate (v1/v2/v3).
     pub fn version(&self) -> Version {
         self.version
@@ -178,14 +187,14 @@ impl<P: Profile> TbsCertificateInner<P> {
     ///
     /// X.509 serial numbers are used to uniquely identify certificates issued by a given
     /// Certificate Authority (CA) identified in the `issuer` field.
-    pub fn serial_number(&self) -> &SerialNumber<P> {
+    pub fn serial_number(&self) -> &SerialNumber<IntType, P> {
         &self.serial_number
     }
 
     /// Identifies the signature algorithm that this `TBSCertificate` should be signed with.
     ///
     /// In a signed certificate, matches [`CertificateInner::signature_algorithm`].
-    pub fn signature(&self) -> &AlgorithmIdentifier {
+    pub fn signature(&self) -> &AlgorithmIdentifier<AnyType> {
         &self.signature
     }
 
@@ -236,7 +245,7 @@ impl<P: Profile> TbsCertificateInner<P> {
     /// allowing them to convey more specific details about the certificate's usage and constraints.
     ///
     /// (NOTE: added in X.509 v3)
-    pub fn extensions(&self) -> Option<&ext::Extensions> {
+    pub fn extensions(&self) -> Option<&ext::ExtensionsGeneric<OctetStringType>> {
         self.extensions.as_ref()
     }
 
@@ -311,14 +320,14 @@ impl<P: Profile> TbsCertificateInner<P> {
             .unwrap_or(&[])
             .iter()
             .filter(|e| e.extn_id == T::OID)
-            .map(|e| Ok((e.critical, T::from_der(e.extn_value.as_bytes())?)))
+            .map(|e| Ok((e.critical, T::from_der(e.extn_value.as_ref())?)))
     }
 }
 
 /// X.509 certificates are defined in [RFC 5280 Section 4.1].
 ///
 /// [RFC 5280 Section 4.1]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
-pub type Certificate = CertificateInner<Rfc5280>;
+pub type Certificate = CertificateInner<Any, OctetString, BitString, Int, Rfc5280>;
 
 /// X.509 certificates are defined in [RFC 5280 Section 4.1].
 ///
@@ -334,32 +343,44 @@ pub type Certificate = CertificateInner<Rfc5280>;
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 #[allow(missing_docs)]
-pub struct CertificateInner<P: Profile = Rfc5280> {
-    pub(crate) tbs_certificate: TbsCertificateInner<P>,
-    pub(crate) signature_algorithm: AlgorithmIdentifier,
-    pub(crate) signature: BitString,
+pub struct CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P: Profile = Rfc5280>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
+    pub(crate) tbs_certificate: TbsCertificateInner<AnyType, OctetStringType, IntType, P>,
+    pub(crate) signature_algorithm: AlgorithmIdentifier<AnyType>,
+    pub(crate) signature: BitStringType,
 }
 
-impl<P: Profile> CertificateInner<P> {
+impl<AnyType, OctetStringType, BitStringType, IntType, P: Profile> CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// Get the [`TbsCertificateInner`] (i.e. the part the signature is computed over).
-    pub fn tbs_certificate(&self) -> &TbsCertificateInner<P> {
+    pub fn tbs_certificate(&self) -> &TbsCertificateInner<AnyType, OctetStringType, IntType, P> {
         &self.tbs_certificate
     }
 
     /// Signature algorithm used to sign the serialization of [`CertificateInner::tbs_certificate`].
-    pub fn signature_algorithm(&self) -> &AlgorithmIdentifier {
+    pub fn signature_algorithm(&self) -> &AlgorithmIdentifier<AnyType> {
         &self.signature_algorithm
     }
 
     /// Signature over the DER serialization of [`CertificateInner::tbs_certificate`] using the
     /// algorithm identified in [`CertificateInner::signature_algorithm`].
-    pub fn signature(&self) -> &BitString {
+    pub fn signature(&self) -> &BitStringType {
         &self.signature
     }
 }
 
 #[cfg(feature = "pem")]
-impl<P: Profile> PemLabel for CertificateInner<P> {
+impl<AnyType, OctetStringType, BitStringType, IntType, P: Profile> PemLabel for CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     const PEM_LABEL: &'static str = "CERTIFICATE";
 }
 
@@ -377,7 +398,11 @@ impl<P: Profile> PemLabel for CertificateInner<P> {
 pub type PkiPath = Vec<Certificate>;
 
 #[cfg(feature = "pem")]
-impl<P: Profile> CertificateInner<P> {
+impl<AnyType, OctetStringType, BitStringType, IntType, P: Profile> CertificateInner<AnyType, OctetStringType, BitStringType, IntType, P>
+where for<'a> OctetStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> BitStringType: FixedTag + Encode + DerOrd + DecodeValue<'a, Error = der::Error> + 'a,
+      for<'a> AnyType: Encode + DerOrd + Choice<'a, Error = der::Error> + 'a,
+      for<'a> IntType: DerOrd + IntLike<'a> + EncodeValue + DecodeValue<'a, Error = der::Error> + 'a {
     /// Parse a chain of pem-encoded certificates from a slice.
     ///
     /// Returns the list of certificates.

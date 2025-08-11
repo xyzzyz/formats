@@ -2,15 +2,47 @@
 
 use core::{fmt::Display, marker::PhantomData};
 
-use der::{
-    DecodeValue, EncodeValue, ErrorKind, FixedTag, Header, Length, Reader, Result, Tag, ValueOrd,
-    Writer,
-    asn1::{self, Int},
-};
+use der::{DecodeValue, EncodeValue, ErrorKind, FixedTag, Header, Length, Reader, Result, Tag, ValueOrd, Writer, asn1::{self, Int}, DerOrd, SliceReader};
 #[cfg(feature = "builder")]
 use {alloc::vec, signature::rand_core::CryptoRng};
-
+use der::asn1::IntRef;
 use crate::certificate::{Profile, Rfc5280};
+
+pub trait IntLike<'a> {
+    fn as_bytes(&self) -> &[u8];
+    fn len(&self) -> Length;
+    fn from_int_ref(int_ref: IntRef<'a>) -> Self;
+}
+
+impl IntLike<'_> for Int {
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+
+    fn len(&self) -> Length {
+        self.len()
+    }
+
+    fn from_int_ref(int_ref: IntRef<'_>) -> Self {
+        Self::from(&int_ref)
+    }
+}
+impl<'a> IntLike<'a> for IntRef<'a> {
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+
+    fn len(&self) -> Length {
+        self.len()
+    }
+
+    fn from_int_ref(int_ref: IntRef<'a>) -> Self {
+        int_ref.clone()
+    }
+}
+
+/// See notes in `SerialNumber::new` and `SerialNumber::decode_value`.
+pub(crate) const MAX_DECODE_LEN: Length = Length::new(21);
 
 /// [RFC 5280 Section 4.1.2.2.]  Serial Number
 ///
@@ -29,17 +61,15 @@ use crate::certificate::{Profile, Rfc5280};
 ///   that are negative or zero.  Certificate users SHOULD be prepared to
 ///   gracefully handle such certificates.
 #[derive(Clone, Debug, Eq, PartialEq, ValueOrd, PartialOrd, Ord)]
-pub struct SerialNumber<P: Profile = Rfc5280> {
-    pub(crate) inner: Int,
+pub struct SerialNumber<IntType, P: Profile = Rfc5280>
+where IntType: DerOrd {
+    pub(crate) inner: IntType,
     _profile: PhantomData<P>,
 }
 
-impl<P: Profile> SerialNumber<P> {
+impl<P: Profile> SerialNumber<Int, P> {
     /// Maximum length in bytes for a [`SerialNumber`]
     pub const MAX_LEN: Length = Length::new(20);
-
-    /// See notes in `SerialNumber::new` and `SerialNumber::decode_value`.
-    pub(crate) const MAX_DECODE_LEN: Length = Length::new(21);
 
     /// Create a new [`SerialNumber`] from a byte slice.
     ///
@@ -61,7 +91,10 @@ impl<P: Profile> SerialNumber<P> {
             _profile: PhantomData,
         })
     }
+}
 
+impl<IntType, P: Profile> SerialNumber<IntType, P>
+where for <'a> IntType: IntLike<'a> + DerOrd + 'a {
     /// Borrow the inner byte slice which contains the least significant bytes
     /// of a big endian integer value with all leading zeros stripped.
     pub fn as_bytes(&self) -> &[u8] {
@@ -120,7 +153,8 @@ impl<P: Profile> SerialNumber<P> {
     }
 }
 
-impl<P: Profile> EncodeValue for SerialNumber<P> {
+impl<IntType, P: Profile> EncodeValue for SerialNumber<IntType, P>
+where IntType: DerOrd + EncodeValue {
     fn value_len(&self) -> Result<Length> {
         self.inner.value_len()
     }
@@ -130,13 +164,14 @@ impl<P: Profile> EncodeValue for SerialNumber<P> {
     }
 }
 
-impl<'a, P: Profile> DecodeValue<'a> for SerialNumber<P> {
+impl<'a, IntType,  P: Profile> DecodeValue<'a> for SerialNumber<IntType, P>
+where IntType: IntLike<'a> + DerOrd + DecodeValue<'a, Error = der::Error> + 'a {
     type Error = der::Error;
 
     fn decode_value<R: Reader<'a>>(reader: &mut R, header: Header) -> Result<Self> {
-        let inner = Int::decode_value(reader, header)?;
+        let int = IntType::decode_value(reader, header)?;
         let serial = Self {
-            inner,
+            inner: int,
             _profile: PhantomData,
         };
 
@@ -146,13 +181,15 @@ impl<'a, P: Profile> DecodeValue<'a> for SerialNumber<P> {
     }
 }
 
-impl<P: Profile> FixedTag for SerialNumber<P> {
+impl<IntType, P: Profile> FixedTag for SerialNumber<IntType, P>
+where IntType: DerOrd {
     const TAG: Tag = <Int as FixedTag>::TAG;
 }
 
-impl Display for SerialNumber {
+impl<IntType, P: Profile> Display for SerialNumber<IntType, P>
+where for <'a> IntType: IntLike<'a> + DerOrd {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut iter = self.as_bytes().iter().peekable();
+        let mut iter = self.inner.as_bytes().iter().peekable();
 
         while let Some(byte) = iter.next() {
             match iter.peek() {
@@ -167,8 +204,8 @@ impl Display for SerialNumber {
 
 macro_rules! impl_from {
     ($source:ty) => {
-        impl From<$source> for SerialNumber {
-            fn from(inner: $source) -> SerialNumber {
+        impl From<$source> for SerialNumber<Int> {
+            fn from(inner: $source) -> SerialNumber<Int> {
                 let serial_number = &inner.to_be_bytes()[..];
                 let serial_number = asn1::Uint::new(serial_number).unwrap();
 
@@ -213,7 +250,7 @@ mod tests {
         // Creating a new serial with an oversized encoding (due to high MSB) fails.
         {
             let too_big = [0x80; 20];
-            assert!(SerialNumber::<Rfc5280>::new(&too_big).is_err());
+            assert!(SerialNumber::<Int, Rfc5280>::new(&too_big).is_err());
         }
 
         // Creating a new serial with the maximum encoding succeeds.
@@ -222,27 +259,27 @@ mod tests {
                 0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
             ];
-            assert!(SerialNumber::<Rfc5280>::new(&just_enough).is_ok());
+            assert!(SerialNumber::<Int, Rfc5280>::new(&just_enough).is_ok());
         }
     }
 
     #[test]
     fn serial_number_display() {
         {
-            let sn = SerialNumber::new(&[0x11, 0x22, 0x33]).unwrap();
+            let sn = SerialNumber::<Int>::new(&[0x11, 0x22, 0x33]).unwrap();
 
             assert_eq!(sn.to_string(), "11:22:33")
         }
 
         {
-            let sn = SerialNumber::new(&[0xAA, 0xBB, 0xCC, 0x01, 0x10, 0x00, 0x11]).unwrap();
+            let sn = SerialNumber::<Int>::new(&[0xAA, 0xBB, 0xCC, 0x01, 0x10, 0x00, 0x11]).unwrap();
 
             // We force the user's serial to be positive if they give us a negative one.
             assert_eq!(sn.to_string(), "00:AA:BB:CC:01:10:00:11")
         }
 
         {
-            let sn = SerialNumber::new(&[0x00, 0x00, 0x01]).unwrap();
+            let sn = SerialNumber::<Int>::new(&[0x00, 0x00, 0x01]).unwrap();
 
             // Leading zeroes are ignored, due to canonicalization.
             assert_eq!(sn.to_string(), "01")
